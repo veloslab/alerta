@@ -1,4 +1,4 @@
-FROM alerta/alerta-web:latest
+FROM alerta/alerta-web:8.7.0
 COPY crontab /etc/cron.d/alerta.heartbeat
 USER root
 RUN apt-get update
