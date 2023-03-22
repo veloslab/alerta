@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from abc import ABC
@@ -40,7 +39,7 @@ def format_template(template_fmt: str, alert: Alert) -> Optional[str]:
         return None
 
 
-class SlackPlugin(PluginBase, ABC):
+class SlackThreadPlugin(PluginBase, ABC):
 
     def __init__(self, name=None):
         super().__init__(name)
@@ -111,7 +110,7 @@ class SlackPlugin(PluginBase, ABC):
             if response['ok']:
                 alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
             else:
-                logger.error(f"Post to slack failed for alert {alert.id}:\n{response} for ")
+                logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
                 return
 
         # Send reply to thread
@@ -121,5 +120,5 @@ class SlackPlugin(PluginBase, ABC):
         if response['ok']:
             alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
         else:
-            logger.error(f"Post to slack failed for alert {alert.id}:\n{response} for ")
+            logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
 
