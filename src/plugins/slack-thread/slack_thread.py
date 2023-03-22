@@ -46,7 +46,7 @@ class SlackThreadPlugin(PluginBase, ABC):
         self.client = WebClient(token=self.get_config('SLACK_TOKEN', type=str))
         self.default_channel_id = self.get_config('SLACK_DEFAULT_CHANNEL_ID', type=str)
         self.default_fallback = "[{{alert.severity}}] {{alert.environment}}/{{alert.service}}/{{alert.resource}}/{{alert.event}}"
-        self.default_thread_timeout = self.get_config('SLACK_DEFAULT_THREAD_TIMEOUT', type=int)
+        self.default_thread_timeout = self.get_config('SLACK_DEFAULT_THREAD_TIMEOUT', type=int, default=24)
         self.channels = {}
 
     def generate_new_thread(self, alert: Alert, channel_id: str) -> bool:
@@ -61,7 +61,7 @@ class SlackThreadPlugin(PluginBase, ABC):
             return True
 
         thread_age = time.time() - int(alert.attributes.get('slack_ts'))
-        if thread_age >= int(alert.attributes.get('slack_thread_timeout', self.default_thread_timeout)):
+        if thread_age >= int(alert.attributes.get('slack_thread_timeout', self.default_thread_timeout)) * 3600:
             logger.info(f"New slack thread being generated for {alert}, existing thread has reached timeout")
             return True
         else:
