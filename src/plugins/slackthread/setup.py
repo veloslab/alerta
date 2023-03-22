@@ -11,7 +11,7 @@ setup(
     author='Carlos Ramos',
     author_email='crqdev@gmail.com',
     packages=find_packages(),
-    py_modules=['slackthread.py'],
+    py_modules=['slackthread'],
     install_requires=[
         'slack_sdk',
         'dotmap',
