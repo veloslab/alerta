@@ -21,7 +21,7 @@ setup(
     zip_safe=True,
     entry_points={
         'alerta.plugins': [
-            'slack-thread = slack_thread:SlackThreadPlugin'
+            'slack-thread = slack-thread:SlackThreadPlugin'
         ]
     }
 )
