@@ -6,7 +6,7 @@ from jinja2 import Template
 from alerta.plugins import PluginBase
 from alerta.models.alert import Alert
 from dotmap import DotMap
-from typing import Dict, Optional, Union, List
+from typing import Any, Optional
 
 logger = logging.getLogger('alerta.plugins.slack')
 
@@ -122,3 +122,5 @@ class SlackThreadPlugin(PluginBase, ABC):
         else:
             logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
 
+    def status_change(self, alert: Alert, status: str, text: str, **kwargs) -> Any:
+        return
