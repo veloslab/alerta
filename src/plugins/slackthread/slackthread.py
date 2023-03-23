@@ -90,7 +90,6 @@ class SlackThreadPlugin(PluginBase, ABC):
         # slack_delay
         if (alert.duplicate_count + 1) <= int(alert.attributes.get('slack_delay', 0)):
             return
-        alert.du
         # Generate slack payload and channel_id
         slack_channel_id = self.get_channel_id(alert)
         slack_payload = [
