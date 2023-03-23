@@ -1,3 +1,5 @@
-FROM alerta/alerta-web:0.7.0
+FROM alerta/alerta-web:9.0.0
+USER root
 COPY src/ /src
-RUN /venv/bin/python /src/plugins/slackthread/setup.py install
+RUN /venv/bin/pip install /src/plugins/slackthread/
+USER alerta
