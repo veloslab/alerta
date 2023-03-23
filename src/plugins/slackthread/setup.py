@@ -14,7 +14,6 @@ setup(
     py_modules=['slackthread'],
     install_requires=[
         'slack_sdk',
-        'dotmap',
         'jinja2'
     ],
     include_package_data=True,

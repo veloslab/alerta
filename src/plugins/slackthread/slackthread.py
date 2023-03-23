@@ -5,8 +5,7 @@ from slack_sdk import WebClient
 from jinja2 import Template
 from alerta.plugins import PluginBase
 from alerta.models.alert import Alert
-from dotmap import DotMap
-from typing import Dict, Optional, Union, List
+from typing import Any, Optional
 
 logger = logging.getLogger('alerta.plugins.slack')
 
@@ -22,7 +21,6 @@ DEFAULT_COLOR_MAP = {'security': '#000000',  # black
 
 
 def format_template(template_fmt: str, alert: Alert) -> Optional[str]:
-    alert_dm = DotMap(alert.serialize)
     try:
         logger.debug(f"Generating template: {template_fmt}")
         template = Template(template_fmt)
@@ -31,9 +29,9 @@ def format_template(template_fmt: str, alert: Alert) -> Optional[str]:
         return None
 
     try:
-        logger.debug(f"Rendering alert: {alert_dm}")
-        raw_string = template.render(alert=alert_dm)
-        return raw_string.replace('DotMap()', '')
+        logger.debug(f"Rendering alert: {alert}")
+        raw_string = template.render(alert=alert)
+        return raw_string
     except Exception as e:
         logger.error(f"Template render failed: {repr(e)}")
         return None
@@ -60,7 +58,7 @@ class SlackThreadPlugin(PluginBase, ABC):
                         f"New: {channel_id}",)
             return True
 
-        thread_age = time.time() - int(alert.attributes.get('slack_ts'))
+        thread_age = time.time() - float(alert.attributes.get('slack_ts'))
         if thread_age >= int(alert.attributes.get('slack_thread_timeout', self.default_thread_timeout)) * 3600:
             logger.info(f"New slack thread being generated for {alert}, existing thread has reached timeout")
             return True
@@ -92,7 +90,6 @@ class SlackThreadPlugin(PluginBase, ABC):
         # slack_delay
         if (alert.duplicate_count + 1) <= int(alert.attributes.get('slack_delay', 0)):
             return
-
         # Generate slack payload and channel_id
         slack_channel_id = self.get_channel_id(alert)
         slack_payload = [
@@ -122,3 +119,5 @@ class SlackThreadPlugin(PluginBase, ABC):
         else:
             logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
 
+    def status_change(self, alert: Alert, status: str, text: str, **kwargs) -> Any:
+        return
