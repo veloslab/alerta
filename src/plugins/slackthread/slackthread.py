@@ -88,7 +88,7 @@ class SlackThreadPlugin(PluginBase, ABC):
     def post_receive(self, alert: Alert, **kwargs) -> Optional[Alert]:
         # If alert attribute 'slack_delay' is set to greater than 0, delay posting to slack until alert count exceeds
         # slack_delay
-        if (alert.duplicate_count + 1) <= int(alert.attributes.get('slack_delay', 0)):
+        if (alert.duplicate_count + 1) <= int(alert.attributes.get('slack_delay', 0)) and alert.attributes.get('slack_channel_id', None) is None:
             return
         # Generate slack payload and channel_id
         slack_channel_id = self.get_channel_id(alert)
