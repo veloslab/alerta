@@ -7,7 +7,7 @@ from alerta.plugins import PluginBase
 from alerta.models.alert import Alert
 from typing import Any, Optional
 
-logger = logging.getLogger('alerta.plugins.slack')
+logger = logging.getLogger('alerta.plugins.slackthread')
 
 DEFAULT_COLOR_MAP = {'security': '#000000',  # black
                      'critical': '#FF0000',  # red
