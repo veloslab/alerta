@@ -13,7 +13,7 @@ services:
       - ADMIN_PASSWORD=super-secret
       - ADMIN_KEY=demo-key
       - ADMIN_KEY_MAXAGE=500
-      - PLUGINS=remote_ip,reject,heartbeat,blackout,normalise,enhance, slackthread
+      - PLUGINS=remote_ip,reject,heartbeat,blackout,normalise,enhance,slackthread
     restart: always
 
   db:
