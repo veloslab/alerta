@@ -105,8 +105,8 @@ class SlackThreadPlugin(PluginBase, ABC):
             {
                 "color": DEFAULT_COLOR_MAP.get(alert.severity),
                 "mrkdwn_in": ["text"],
-                "text": format_template(alert.text, alert),
-                "fallback": format_template(alert.attributes.get('fallback', self.default_fallback), alert)
+                "text": format_template(alert.attributes.get('slack_template', alert.text), alert),
+                "fallback": format_template(alert.attributes.get('slack_fallback', self.default_fallback), alert)
             }
         ]
 
@@ -129,6 +129,12 @@ class SlackThreadPlugin(PluginBase, ABC):
                                                     thread_ts=alert.attributes.get('slack_ts'))
             if not response['ok']:
                 logger.error(f"Threaded reply to slack failed for {alert}\nReceived: {response}")
+
+            response = self.client.chat_update(channel=slack_channel_id,
+                                               ts=alert.attributes.get('slack_ts'),
+                                               attachments=slack_payload)
+            if not response['ok']:
+                logger.error(f"Update to slack thread parent failed for {alert}\nReceived: {response}")
 
     def status_change(self, alert: Alert, status: str, text: str, **kwargs) -> Any:
         return
