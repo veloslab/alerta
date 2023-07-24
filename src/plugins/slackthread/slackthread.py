@@ -17,6 +17,7 @@ DEFAULT_COLOR_MAP = {'security': '#000000',  # black
                      'informational': '#808080',  # gray
                      'debug': '#808080',  # gray
                      'trace': '#808080',  # gray
+                     'normal': '#00CC00',  # green
                      'ok': '#00CC00'}  # green
 
 
@@ -86,10 +87,18 @@ class SlackThreadPlugin(PluginBase, ABC):
         return alert
 
     def post_receive(self, alert: Alert, **kwargs) -> Optional[Alert]:
-        # If alert attribute 'slack_delay' is set to greater than 0, delay posting to slack until alert count exceeds
-        # slack_delay
-        if (alert.duplicate_count + 1) <= int(alert.attributes.get('slack_delay', 0)) and alert.attributes.get('slack_channel_id', None) is None:
+
+        # Don't post ok/normals more than once
+        if alert.duplicate_count >= 1 and alert.severity.lower() in ['ok', 'normal']:
             return
+
+        # Slack Notification Modulus
+        slack_notification_modulus = int(alert.attributes.get('slack_notification_modulus', 1))
+
+        if alert.duplicate_count % slack_notification_modulus != 0:
+            logger.info(f"Slack message won't be send, slack_notification_modulus returned non-zero")
+            return
+
         # Generate slack payload and channel_id
         slack_channel_id = self.get_channel_id(alert)
         slack_payload = [
@@ -102,22 +111,24 @@ class SlackThreadPlugin(PluginBase, ABC):
         ]
 
         # Determine if thread needs to be created
+        initial_thread_message = False
         if self.generate_new_thread(alert, slack_channel_id):
             response = self.client.chat_postMessage(channel=slack_channel_id, attachments=slack_payload)
             if response['ok']:
                 alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
+                initial_thread_message = True
             else:
-                logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
+                logger.error(f"Initial post to slack failed for {alert}\nReceived: {response}")
                 return
 
-        # Send reply to thread
-        response = self.client.chat_postMessage(channel=slack_channel_id,
-                                                attachments=slack_payload,
-                                                thread_ts=alert.attributes.get('slack_ts'))
-        if response['ok']:
-            alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
-        else:
-            logger.error(f"Post to slack failed for {alert}\nReceived: {response}")
+        # If not initial message for thread, send reply to thread and/or update parent message
+        if initial_thread_message is False:
+            # Send reply to thread
+            response = self.client.chat_postMessage(channel=slack_channel_id,
+                                                    attachments=slack_payload,
+                                                    thread_ts=alert.attributes.get('slack_ts'))
+            if not response['ok']:
+                logger.error(f"Threaded reply to slack failed for {alert}\nReceived: {response}")
 
     def status_change(self, alert: Alert, status: str, text: str, **kwargs) -> Any:
         return
