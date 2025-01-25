@@ -28,7 +28,7 @@ class OverridePlugin(PluginBase, ABC):
                 if service not in service_overrides:
                     service_overrides[service] = {}
                 if override.startswith('attributes_'):
-                    if 'attributes' not in service_overrides:
+                    if 'attributes' not in service_overrides[service]:
                         service_overrides[service]['attributes'] = {}
                     service_overrides[service]['attributes'][override.replace('attributes_', '')] = value
                 else:
