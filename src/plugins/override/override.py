@@ -21,7 +21,7 @@ class OverridePlugin(PluginBase, ABC):
     def __init__(self, name=None):
         super().__init__(name)
         service_overrides = {}
-        for key, value in {**os.environ, **app.config}:
+        for key, value in {**os.environ, **app.config}.items():
             key = key.lower()
             if key.startswith('override_'):
                 service, override = [i.strip() for i in key.replace('override_', '').split('_', 1)]
