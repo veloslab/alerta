@@ -36,7 +36,10 @@ class OverridePlugin(PluginBase, ABC):
         self.service_override = service_overrides
 
     def pre_receive(self, alert: Alert, **kwargs) -> Alert:
-        service = alert.service.lower()
+        services = [i.lower() for i in alert.service]
+        if len(services) > 1:
+            logger.warning("More than one service listed...override plugin will use first one")
+        service = services[0]
         if service in self.service_override:
             logger.info(f"{alert} will be modified")
             for key, value in self.service_override[service].items():
