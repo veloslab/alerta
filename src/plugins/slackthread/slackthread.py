@@ -24,9 +24,7 @@ DEFAULT_COLOR_MAP = {'security': '#000000',  # black
 # into the render context by SlackThreadPlugin.post_receive so operators
 # don't have to duplicate the Alerta UI URL inside the template string.
 DEFAULT_SLACK_TEMPLATE = (
-    "<{{ dashboard_url }}/alert/{{ alert.id }}|{{ alert.id }}> - "
-    "{{ alert.environment }}/{{ alert.resource }}/{{ alert.event }}\n"
-    "```{{ alert.text }}```"
+    "*{{ alert.resource }}/{{ alert.event }}*\n```{{ alert.text }}```\n<{{ dashboard_url }}/alert/{{ alert.id }}|alert>"
 )
 
 
