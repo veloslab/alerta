@@ -20,8 +20,34 @@ DEFAULT_COLOR_MAP = {'security': '#000000',  # black
                      'normal': '#00CC00',  # green
                      'ok': '#00CC00'}  # green
 
+# Used when SLACK_DEFAULT_TEMPLATE is unset. `dashboard_url` is injected
+# into the render context by SlackThreadPlugin.post_receive so operators
+# don't have to duplicate the Alerta UI URL inside the template string.
+DEFAULT_SLACK_TEMPLATE = (
+    "<{{ dashboard_url }}/alert/{{ alert.id }}|{{ alert.id }}> - "
+    "{{ alert.environment }}/{{ alert.resource }}/{{ alert.event }}\n"
+    "```{{ alert.text }}```"
+)
 
-def format_template(template_fmt: str, alert: Alert) -> Optional[str]:
+
+def format_template(template_fmt: str, alert: Alert, **context) -> Optional[str]:
+    """Render a Jinja2 template against an alert plus extra context.
+
+    Args:
+        template_fmt: The Jinja2 template source. Typically comes from
+            an alert attribute (``slack_template``, ``slack_fallback``)
+            or a plugin-level default.
+        alert: The Alerta alert the template renders against. Bound to
+            the name ``alert`` inside the template.
+        **context: Additional variables to expose to the template (e.g.
+            ``dashboard_url``). Keyword names become Jinja2 variable
+            names verbatim.
+
+    Returns:
+        The rendered string, or ``None`` if either the template failed
+        to parse or the render raised. In either failure case the
+        specific exception is already logged.
+    """
     try:
         logger.debug(f"Generating template: {template_fmt}")
         template = Template(template_fmt)
@@ -31,7 +57,7 @@ def format_template(template_fmt: str, alert: Alert) -> Optional[str]:
 
     try:
         logger.debug(f"Rendering alert: {alert}")
-        raw_string = template.render(alert=alert)
+        raw_string = template.render(alert=alert, **context)
         return raw_string
     except Exception as e:
         logger.error(f"Template render failed: {repr(e)}")
@@ -46,6 +72,16 @@ class SlackThreadPlugin(PluginBase, ABC):
         self.default_channel_id = self.get_config('SLACK_DEFAULT_CHANNEL_ID', type=str)
         self.default_fallback = "[{{alert.severity}}] {{alert.environment}}/{{alert.service}}/{{alert.resource}}/{{alert.event}}"
         self.default_thread_timeout = self.get_config('SLACK_DEFAULT_THREAD_TIMEOUT', type=int, default=24)
+        dashboard_url = self.get_config('DASHBOARD_URL', type=str, default='')
+        if dashboard_url and not dashboard_url.startswith(('http://', 'https://')):
+            dashboard_url = 'https://' + dashboard_url
+        self.dashboard_url = dashboard_url
+        # .env files can't carry a literal newline, so operators write
+        # the template on one line and use `\n` where they want breaks
+        # (Slack renders real newlines). Unescape those here.
+        self.default_template = self.get_config(
+            'SLACK_DEFAULT_TEMPLATE', type=str, default=DEFAULT_SLACK_TEMPLATE
+        ).replace('\\n', '\n')
         self.channels = {}
 
     def generate_new_thread(self, alert: Alert, channel_id: str) -> bool:
@@ -105,8 +141,16 @@ class SlackThreadPlugin(PluginBase, ABC):
             {
                 "color": DEFAULT_COLOR_MAP.get(alert.severity),
                 "mrkdwn_in": ["text"],
-                "text": format_template(alert.attributes.get('slack_template', alert.text), alert),
-                "fallback": format_template(alert.attributes.get('slack_fallback', self.default_fallback), alert)
+                "text": format_template(
+                    alert.attributes.get('slack_template', self.default_template),
+                    alert,
+                    dashboard_url=self.dashboard_url,
+                ),
+                "fallback": format_template(
+                    alert.attributes.get('slack_fallback', self.default_fallback),
+                    alert,
+                    dashboard_url=self.dashboard_url,
+                )
             }
         ]
 
