@@ -2,6 +2,7 @@ import logging
 import time
 from abc import ABC
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from jinja2 import Template
 from alerta.plugins import PluginBase
 from alerta.models.alert import Alert
@@ -145,20 +146,42 @@ class SlackThreadPlugin(PluginBase, ABC):
             return False
 
     def get_channel_id(self, alert: Alert) -> str:
-        channel = alert.attributes.get('slack_channel', '@default')
-        if channel == '@default':
+        """Resolve a Slack channel name from the alert's ``slack_channel`` attribute.
+
+        Slack's ``conversations.list`` API returns channel names WITHOUT a
+        leading ``#``, but users naturally write ``slack_channel: '#alerts-db'``
+        in Grafana labels (matching how they'd mention a channel in Slack).
+        Strip ``#`` on both sides — the user-supplied key and the names
+        returned by the API — so the cache and lookup keys always agree
+        regardless of which convention the source uses.
+
+        Args:
+            alert: The Alerta alert being processed. The ``slack_channel``
+                attribute is read; ``@default`` (or absent) returns the
+                plugin's configured default channel ID.
+
+        Returns:
+            The Slack channel ID string (e.g. ``'C012AB3CD'``). Falls back
+            to ``self.default_channel_id`` when the name cannot be resolved.
+        """
+        raw = alert.attributes.get('slack_channel', '@default')
+        if raw == '@default':
             return self.default_channel_id
 
-        if self.channels.get(channel, None) is None:
+        # Strip '#' so '#alerts-db' and 'alerts-db' both resolve the same
+        # cache entry. The API always returns names without '#', so we also
+        # strip when populating the cache below.
+        channel = raw.lstrip('#')
+
+        if self.channels.get(channel) is None:
             data = self.client.conversations_list(types='public_channel,private_channel')
-            channels = {i['name']: i['id'] for i in data['channels']}
-            self.channels.update(**channels)
+            self.channels.update({i['name'].lstrip('#'): i['id'] for i in data['channels']})
 
-        if self.channels.get(channel, None) is None:
-            logger.warning(f"Unable to find channel id for '{channel}', using default channel id")
+        if self.channels.get(channel) is None:
+            logger.warning(f"Unable to find channel id for '{raw}', using default channel id")
             return self.default_channel_id
 
-        return self.channels.get(channel)
+        return self.channels[channel]
 
     def pre_receive(self, alert: Alert, **kwargs) -> Alert:
         return alert
@@ -198,42 +221,68 @@ class SlackThreadPlugin(PluginBase, ABC):
         # Determine if thread needs to be created
         initial_thread_message = False
         if self.generate_new_thread(alert, slack_channel_id):
-            response = self.client.chat_postMessage(channel=slack_channel_id, attachments=slack_payload)
-            if response['ok']:
-                alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
-                initial_thread_message = True
-                # Repost the same payload as the first thread reply so
-                # the thread retains an immutable snapshot of the
-                # original state even after chat_update later mutates
-                # the parent message. A failure here logs but does not
-                # abort — the thread is created and the alert state is
-                # recorded; losing the history reply is strictly less
-                # bad than losing the whole notification.
-                history_reply = self.client.chat_postMessage(
+            try:
+                response = self.client.chat_postMessage(
+                    channel=slack_channel_id,
+                    attachments=slack_payload,
+                )
+            except SlackApiError as e:
+                logger.error(
+                    f"Initial post to slack failed for {alert}: "
+                    f"{e.response.get('error', e)}"
+                )
+                return
+
+            # Record the parent thread's ts and channel before the history
+            # reply so the alert state is preserved even if the reply fails.
+            alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
+            initial_thread_message = True
+
+            # Repost the same payload as the first thread reply so the
+            # thread retains an immutable snapshot of the original state
+            # even after chat_update later mutates the parent message.
+            # A failure here logs but does not abort — the parent post
+            # already succeeded and the alert state is recorded; losing
+            # the history reply is strictly less bad than losing the
+            # whole notification.
+            try:
+                self.client.chat_postMessage(
                     channel=slack_channel_id,
                     attachments=slack_payload,
                     thread_ts=response['ts'],
                 )
-                if not history_reply['ok']:
-                    logger.error(f"History reply to new thread failed for {alert}\nReceived: {history_reply}")
-            else:
-                logger.error(f"Initial post to slack failed for {alert}\nReceived: {response}")
-                return
+            except SlackApiError as e:
+                logger.error(
+                    f"History reply to new thread failed for {alert}: "
+                    f"{e.response.get('error', e)}"
+                )
 
         # If not initial message for thread, send reply to thread and/or update parent message
         if initial_thread_message is False:
             # Send reply to thread
-            response = self.client.chat_postMessage(channel=slack_channel_id,
-                                                    attachments=slack_payload,
-                                                    thread_ts=alert.attributes.get('slack_ts'))
-            if not response['ok']:
-                logger.error(f"Threaded reply to slack failed for {alert}\nReceived: {response}")
+            try:
+                self.client.chat_postMessage(
+                    channel=slack_channel_id,
+                    attachments=slack_payload,
+                    thread_ts=alert.attributes.get('slack_ts'),
+                )
+            except SlackApiError as e:
+                logger.error(
+                    f"Threaded reply to slack failed for {alert}: "
+                    f"{e.response.get('error', e)}"
+                )
 
-            response = self.client.chat_update(channel=slack_channel_id,
-                                               ts=alert.attributes.get('slack_ts'),
-                                               attachments=slack_payload)
-            if not response['ok']:
-                logger.error(f"Update to slack thread parent failed for {alert}\nReceived: {response}")
+            try:
+                self.client.chat_update(
+                    channel=slack_channel_id,
+                    ts=alert.attributes.get('slack_ts'),
+                    attachments=slack_payload,
+                )
+            except SlackApiError as e:
+                logger.error(
+                    f"Update to slack thread parent failed for {alert}: "
+                    f"{e.response.get('error', e)}"
+                )
 
     def status_change(self, alert: Alert, status: str, text: str, **kwargs) -> Any:
         return
