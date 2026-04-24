@@ -78,8 +78,9 @@ class TestGrafanaToSlack:
         parent, reply = calls
         # Default channel (no slack_channel attribute set).
         assert parent['body'].get('channel') == 'C_ALERTS_DEFAULT'
-        # Attachment payload is a JSON string in form-encoded submit.
-        assert 'HighCpuUsage' in parent['body'].get('attachments', '')
+        # slack_sdk sends attachments as JSON; the mock parses them into
+        # a list of dicts, so stringify before substring-checking.
+        assert 'HighCpuUsage' in str(parent['body'].get('attachments', ''))
         # History reply threads under the parent.
         assert 'thread_ts' not in parent['body']
         assert reply['body'].get('thread_ts') is not None
@@ -110,9 +111,11 @@ class TestGrafanaToSlack:
         post_webhook('vls-grafana', payload('grafana.firing_with_overrides'))
 
         posts = slack_mock.captured('chat.postMessage')
-        assert len(posts) == 1
+        # Initial fire posts parent + history reply (same as the
+        # default-channel case above); both must target C_ALERTS_DB.
+        assert len(posts) == 2
         # #db-alerts → C_ALERTS_DB per the mock's default channel roster.
-        assert posts[0]['body'].get('channel') == 'C_ALERTS_DB'
+        assert all(p['body'].get('channel') == 'C_ALERTS_DB' for p in posts)
 
     def test_slack_failure_does_not_break_ingest(
         self, post_webhook, alerta_client, slack_mock, payload,
