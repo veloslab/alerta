@@ -108,10 +108,15 @@ jobs:
 
       - name: Run integration tests
         # Compose stack comes up from within the test fixtures
-        # (tests/integration/conftest.py). Teardown is automatic
-        # unless ALERTA_TESTS_KEEP_STACK=1 is set. Scoped to
-        # tests/integration/ for the same reason as the smoke job —
-        # this runner doesn't install the editable src/ packages.
+        # (tests/integration/conftest.py). Scoped to tests/integration/
+        # for the same reason as the smoke job — this runner doesn't
+        # install the editable src/ packages.
+        # ALERTA_TESTS_KEEP_STACK=1: skip the fixture's session-teardown
+        # so the next step's `docker compose logs` actually has a stack
+        # to read from. The runner is ephemeral, so leaving containers
+        # running on failure is fine.
+        env:
+          ALERTA_TESTS_KEEP_STACK: '1'
         run: pytest tests/integration -m integration --tb=short
 
       - name: Dump compose logs on failure
