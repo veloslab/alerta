@@ -26,7 +26,9 @@ DEFAULT_COLOR_MAP = {'security': '#000000',  # black
 DEFAULT_SLACK_TEMPLATE = (
     "*{{ alert.resource }}/{{ alert.event }}*\n```{{ alert.text }}```\n<{{ dashboard_url }}/alert/{{ alert.id }}|alert>"
 )
-
+DEFAULT_SLACK_TEMPLATE_OK = (
+    "*{{ alert.resource }}/{{ alert.event }}* - OK"
+)
 
 def format_template(template_fmt: str, alert: Alert, **context) -> Optional[str]:
     """Render a Jinja2 template against an alert plus extra context.
@@ -66,7 +68,16 @@ class SlackThreadPlugin(PluginBase, ABC):
 
     def __init__(self, name=None):
         super().__init__(name)
-        self.client = WebClient(token=self.get_config('SLACK_TOKEN', type=str))
+        # SLACK_BASE_URL is an override for the Slack API endpoint.
+        # Default matches slack_sdk's own default; tests point this at
+        # a mock service in docker-compose.test.yml to assert on the
+        # traffic the plugin generates without hitting real Slack.
+        self.client = WebClient(
+            token=self.get_config('SLACK_TOKEN', type=str),
+            base_url=self.get_config(
+                'SLACK_BASE_URL', type=str, default='https://www.slack.com/api/'
+            ),
+        )
         self.default_channel_id = self.get_config('SLACK_DEFAULT_CHANNEL_ID', type=str)
         self.default_fallback = "[{{alert.severity}}] {{alert.environment}}/{{alert.service}}/{{alert.resource}}/{{alert.event}}"
         self.default_thread_timeout = self.get_config('SLACK_DEFAULT_THREAD_TIMEOUT', type=int, default=24)
@@ -74,13 +85,45 @@ class SlackThreadPlugin(PluginBase, ABC):
         if dashboard_url and not dashboard_url.startswith(('http://', 'https://')):
             dashboard_url = 'https://' + dashboard_url
         self.dashboard_url = dashboard_url
-        # .env files can't carry a literal newline, so operators write
-        # the template on one line and use `\n` where they want breaks
-        # (Slack renders real newlines). Unescape those here.
-        self.default_template = self.get_config(
-            'SLACK_DEFAULT_TEMPLATE', type=str, default=DEFAULT_SLACK_TEMPLATE
-        ).replace('\\n', '\n')
+        # Two-step read so _select_template can tell whether an
+        # operator actually configured SLACK_DEFAULT_TEMPLATE. When
+        # set, it wins over the OK fallback (operator knows what they
+        # want). When unset, DEFAULT_SLACK_TEMPLATE_OK can swap in
+        # for resolved alerts. .env files can't carry a literal
+        # newline, so operators write the template on one line and
+        # use `\n` where they want breaks (Slack renders real
+        # newlines). Unescape those here.
+        configured_default = self.get_config('SLACK_DEFAULT_TEMPLATE', type=str, default=None)
+        self._default_template_configured = configured_default is not None
+        self.default_template = (configured_default or DEFAULT_SLACK_TEMPLATE).replace('\\n', '\n')
         self.channels = {}
+
+    def _select_template(self, alert: Alert) -> str:
+        """Pick the Jinja2 template for the alert's Slack attachment.
+
+        Precedence (highest to lowest):
+          1. ``alert.attributes['slack_template']`` — per-alert override.
+          2. Operator-configured ``SLACK_DEFAULT_TEMPLATE`` env.
+          3. ``DEFAULT_SLACK_TEMPLATE_OK`` when the alert's ``text``
+             is any case of "ok" (vls_grafana sets this on resolved
+             alerts).
+          4. ``DEFAULT_SLACK_TEMPLATE`` — the firing default.
+
+        Args:
+            alert: The Alerta alert being rendered. Read for
+                ``attributes`` and ``text`` only.
+
+        Returns:
+            The template source string to feed to ``format_template``.
+        """
+        per_alert = alert.attributes.get('slack_template')
+        if per_alert is not None:
+            return per_alert
+        if self._default_template_configured:
+            return self.default_template
+        if alert.text and alert.text.lower() == 'ok':
+            return DEFAULT_SLACK_TEMPLATE_OK
+        return DEFAULT_SLACK_TEMPLATE
 
     def generate_new_thread(self, alert: Alert, channel_id: str) -> bool:
         if alert.attributes.get('slack_ts', None) is None:
@@ -140,7 +183,7 @@ class SlackThreadPlugin(PluginBase, ABC):
                 "color": DEFAULT_COLOR_MAP.get(alert.severity),
                 "mrkdwn_in": ["text"],
                 "text": format_template(
-                    alert.attributes.get('slack_template', self.default_template),
+                    self._select_template(alert),
                     alert,
                     dashboard_url=self.dashboard_url,
                 ),
@@ -159,6 +202,20 @@ class SlackThreadPlugin(PluginBase, ABC):
             if response['ok']:
                 alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
                 initial_thread_message = True
+                # Repost the same payload as the first thread reply so
+                # the thread retains an immutable snapshot of the
+                # original state even after chat_update later mutates
+                # the parent message. A failure here logs but does not
+                # abort — the thread is created and the alert state is
+                # recorded; losing the history reply is strictly less
+                # bad than losing the whole notification.
+                history_reply = self.client.chat_postMessage(
+                    channel=slack_channel_id,
+                    attachments=slack_payload,
+                    thread_ts=response['ts'],
+                )
+                if not history_reply['ok']:
+                    logger.error(f"History reply to new thread failed for {alert}\nReceived: {history_reply}")
             else:
                 logger.error(f"Initial post to slack failed for {alert}\nReceived: {response}")
                 return
