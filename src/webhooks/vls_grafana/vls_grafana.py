@@ -6,11 +6,15 @@ payload, so this webhook is structurally a fork of alerta-server's
 built-in ``prometheus`` translator. It differs in three ways that
 matter for the veloslab deployment:
 
-1. ``resource`` is built from the ``host`` and ``name`` labels (the
+1. ``event`` is built from the ``host`` and ``name`` labels (the
    telegraf metrics convention used everywhere else in this stack),
-   not from ``instance``. Grafana rules set ``host`` and ``name``
-   directly; the built-in would drop them into tags and default
-   ``resource`` to ``"n/a"``, breaking dedup.
+   making each firing distinct per host. ``resource`` defaults to
+   the rule name (``alertname``), so the Alerta UI's primary column
+   reads as the "what" rather than a composite string. The built-in
+   translator puts ``alertname`` into ``event`` and ``instance`` into
+   ``resource``; we invert both defaults to match this deployment's
+   conventions. Rule-label overrides named ``resource`` and ``event``
+   take precedence over the defaults.
 2. A short allow-list of labels (see ``ATTRIBUTE_LABELS``) is lifted
    from labels into ``attributes`` before the leftover-labels-become-
    tags step. This lets us define defaults for those keys in
@@ -96,13 +100,15 @@ def parse_grafana(alert: JSON, external_url: str) -> Alert:
     else:
         severity = 'unknown'
 
-    # Delta #1: resource is host/name, not instance. Peek at alertname
-    # rather than popping — `event` pops it below as its own fallback.
+    # Delta #1: event is host/name (distinct per firing instance),
+    # resource defaults to the rule name. Peek at alertname for the
+    # composite fallback — `resource` pops it below as its own fallback.
     host = labels.pop('host', 'grafana')
     name = labels.pop('name', None) or labels.get('alertname', 'unknown')
-    resource = f'{host}/{name}'
+    event = labels.pop('event', None) or f'{host}/{name}'
 
-    event = labels.pop('event', None) or labels.pop('alertname')
+    resource = labels.pop('resource', None) or labels.pop('alertname')
+    resource = resource.lower().replace(' ', '_')
     environment = labels.pop('environment', current_app.config['DEFAULT_ENVIRONMENT'])
     customer = labels.pop('customer', None)
     correlate = labels.pop('correlate').split(',') if 'correlate' in labels else None
