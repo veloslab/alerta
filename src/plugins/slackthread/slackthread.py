@@ -27,7 +27,7 @@ DEFAULT_SLACK_TEMPLATE = (
     "*{{ alert.resource }}/{{ alert.event }}*\n```{{ alert.text }}```\n<{{ dashboard_url }}/alert/{{ alert.id }}|alert>"
 )
 DEFAULT_SLACK_TEMPLATE_OK = (
-    "*{{ alert.resource }}/{{ alert.event }}* - OK"
+    "*{{ alert.resource }}/{{ alert.event }}* - Ok"
 )
 
 def format_template(template_fmt: str, alert: Alert, **context) -> Optional[str]:
