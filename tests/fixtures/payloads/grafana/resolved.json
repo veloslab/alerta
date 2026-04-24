@@ -1,0 +1,23 @@
+{
+  "receiver": "alerta-webhook",
+  "status": "resolved",
+  "externalURL": "https://grafana.test",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "HighCpuUsage",
+        "host": "server01",
+        "name": "HighCpuUsage",
+        "severity": "warning",
+        "environment": "Production"
+      },
+      "annotations": {
+        "summary": "CPU recovered"
+      },
+      "startsAt": "2026-04-24T12:00:00Z",
+      "endsAt": "2026-04-24T12:15:00Z",
+      "generatorURL": "https://grafana.test/alerting/rule/abc"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+# Dev/test-only dependencies. Runtime deps live in requirements.txt.
+#
+# Install into the repo-local venv (see tests/README.md):
+#   python3 -m venv .venv
+#   .venv/bin/pip install --upgrade pip 'setuptools<81'
+#   .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+#   .venv/bin/pip install -e src/plugins/slackthread -e src/plugins/override \
+#                         -e src/webhooks/vls_grafana -e src/webhooks/prefectflows
+#
+# The editable installs register plugin/webhook entry points so both
+# unit tests (import by name) and integration tests (hit real routes
+# in the container) can see them.
+
+pytest>=7.4
+pytest-mock>=3.12
+requests>=2.31
+
+# alerta-server 9.0.3 still calls ``from pkg_resources import ...``,
+# which setuptools dropped in 81.x. Pin until alerta drops the call.
+setuptools<81
+
+# alerta-server 9.0.3 imports this but doesn't declare it in
+# install_requires on Python 3.12+ (the stdlib stopped shipping
+# StrEnum-compatible behavior they rely on).
+strenum
+
+# Tier 3 mock server lives in tests/integration/mocks/slack_mock/ and
+# is built as its own docker image. Its deps are pinned in that
+# directory's requirements.txt — not here.

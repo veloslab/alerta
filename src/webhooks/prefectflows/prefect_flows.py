@@ -35,6 +35,9 @@ class PrefectFlowWebhook(WebhookBase):
             value=data.get('value', None),
             text=data.get('text', None),
             tags=data.get('tags', None),
-            attributes=data.get('attributes', None)
+            # Alert.__init__ rejects attributes=None (it pre-checks
+            # .keys() before its own or-dict fallback). Default to
+            # empty dict so the webhook accepts minimal payloads.
+            attributes=data.get('attributes') or {}
         )
 
