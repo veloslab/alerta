@@ -224,3 +224,36 @@ class TestOptionalMetadata:
             'https://grafana.test',
         )
         assert alert.group == 'node-exporter'
+
+    def test_service_missing_yields_empty_list(self, app_context, make_grafana_alert):
+        """No ``service`` label should produce ``[]``, not ``['']``.
+
+        The old ``''.split(',')`` returned a one-element list containing an
+        empty string, which renders as ``['']`` in Slack template fallbacks.
+        """
+        alert = parse_grafana(make_grafana_alert(), 'https://grafana.test')
+        assert alert.service == []
+
+    def test_service_single_value(self, app_context, make_grafana_alert):
+        """A single ``service`` label value is returned as a one-element list."""
+        alert = parse_grafana(
+            make_grafana_alert(labels={'service': 'payments'}),
+            'https://grafana.test',
+        )
+        assert alert.service == ['payments']
+
+    def test_service_csv_splits_into_list(self, app_context, make_grafana_alert):
+        """Comma-separated ``service`` labels are split into individual entries."""
+        alert = parse_grafana(
+            make_grafana_alert(labels={'service': 'payments,auth'}),
+            'https://grafana.test',
+        )
+        assert alert.service == ['payments', 'auth']
+
+    def test_service_trailing_comma_filtered(self, app_context, make_grafana_alert):
+        """A trailing comma in the ``service`` label does not produce an empty entry."""
+        alert = parse_grafana(
+            make_grafana_alert(labels={'service': 'payments,'}),
+            'https://grafana.test',
+        )
+        assert alert.service == ['payments']

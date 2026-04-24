@@ -113,7 +113,7 @@ def parse_grafana(alert: JSON, external_url: str) -> Alert:
     environment = labels.pop('environment', current_app.config['DEFAULT_ENVIRONMENT'])
     customer = labels.pop('customer', None)
     correlate = labels.pop('correlate').split(',') if 'correlate' in labels else None
-    service = labels.pop('service', '').split(',')
+    service = [s for s in labels.pop('service', '').split(',') if s]
     group = labels.pop('group', None) or labels.pop('job', 'Grafana')
 
     try:
