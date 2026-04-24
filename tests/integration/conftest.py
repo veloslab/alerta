@@ -157,11 +157,12 @@ def _purge_all_alerts(session):
     """Delete every alert in the test stack so each test starts clean.
 
     Alerta has no bulk-delete on ``/api/alerts`` (returns 405 Method
-    Not Allowed), so we list and DELETE per-id. Without this, alert
-    state — including ``slack_ts`` in attributes — leaks between tests
-    and the slackthread plugin's ``generate_new_thread`` flips to
-    False, sending a threaded reply instead of a fresh parent + history
-    reply.
+    Not Allowed), so we list and DELETE per-id. The single-resource
+    route is ``/api/alert/<id>`` (singular) — ``/api/alerts/<id>`` does
+    NOT exist and silently 404s. Without this, alert state — including
+    ``slack_ts`` in attributes — leaks between tests and the slackthread
+    plugin's ``generate_new_thread`` flips to False, sending a threaded
+    reply instead of a fresh parent + history reply.
 
     Args:
         session: An authenticated ``requests.Session`` against alerta.
@@ -169,7 +170,7 @@ def _purge_all_alerts(session):
     r = session.get(f'{ALERTA_URL}/api/alerts', timeout=10)
     r.raise_for_status()
     for alert in r.json().get('alerts', []):
-        session.delete(f'{ALERTA_URL}/api/alerts/{alert["id"]}', timeout=10)
+        session.delete(f'{ALERTA_URL}/api/alert/{alert["id"]}', timeout=10)
 
 
 @pytest.fixture
