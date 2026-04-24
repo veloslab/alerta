@@ -1,0 +1,44 @@
+# Integration test stack. Brings up alerta + postgres + slack_mock,
+# with the plugin pointing at the mock instead of real Slack.
+#
+# Run from the repo root with:
+#   docker compose -f docker-compose.yml -f tests/integration/docker-compose.test.yml up --build -d
+#
+# Or let pytest drive it via tests/integration/conftest.py.
+#
+# Extending: to wire a new plugin's HTTP side effect through a mock,
+# add another service here, point the plugin's *_BASE_URL (or
+# equivalent) at it, and add test assertions that hit the mock's
+# /_captured endpoint.
+
+services:
+  web:
+    environment:
+      # Mock Slack redirect — this is the reason this file exists.
+      - SLACK_BASE_URL=http://slack_mock:8080/api/
+      - SLACK_TOKEN=xoxb-test-token-integration
+      - SLACK_DEFAULT_CHANNEL_ID=C_ALERTS_DEFAULT
+      # Enable only the plugins under test plus the always-on core.
+      - PLUGINS=remote_ip,reject,blackout,normalise,enhance,slackthread,override
+      # Sample OVERRIDE_ entry so override-plugin integration has traffic.
+      - OVERRIDE_prefect_severity=major
+      # Dashboard URL for slack template.
+      - DASHBOARD_URL=https://alerta.test
+    depends_on:
+      - db
+      - slack_mock
+
+  slack_mock:
+    build:
+      context: ./tests/integration/mocks/slack_mock
+    ports:
+      # Exposed so pytest running on the host can hit /_captured.
+      # Alerta itself reaches this via the compose network (slack_mock:8080).
+      - "18080:8080"
+    restart: unless-stopped
+
+  db:
+    # Override the volume so test runs don't pollute local pg-data.
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data

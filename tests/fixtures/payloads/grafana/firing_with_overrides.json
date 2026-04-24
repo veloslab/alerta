@@ -1,0 +1,30 @@
+{
+  "receiver": "alerta-webhook",
+  "status": "firing",
+  "externalURL": "https://grafana.test",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "DiskFull",
+        "host": "db-primary",
+        "name": "DiskFull",
+        "severity": "critical",
+        "environment": "Production",
+        "resource": "db-primary-disk",
+        "event": "disk_exhaustion",
+        "slack_channel": "#db-alerts",
+        "team": "dba",
+        "runbook_url": "https://runbooks.test/disk-full",
+        "custom_tag": "fleet=core"
+      },
+      "annotations": {
+        "summary": "/var at 98%",
+        "description": "db-primary /var partition at 98% usage"
+      },
+      "startsAt": "2026-04-24T12:05:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://grafana.test/alerting/rule/def"
+    }
+  ]
+}

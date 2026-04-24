@@ -1,0 +1,23 @@
+{
+  "receiver": "alerta-webhook",
+  "status": "firing",
+  "externalURL": "https://grafana.test",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "GenericRule",
+        "host": "web-01",
+        "name": "GenericRule",
+        "severity": "minor",
+        "environment": "Production"
+      },
+      "annotations": {
+        "alertname": "P95LatencyDegraded",
+        "summary": "P95 latency {{ $value }}ms for /checkout"
+      },
+      "startsAt": "2026-04-24T12:20:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

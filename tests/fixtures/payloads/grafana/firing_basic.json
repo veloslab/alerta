@@ -1,0 +1,24 @@
+{
+  "receiver": "alerta-webhook",
+  "status": "firing",
+  "externalURL": "https://grafana.test",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighCpuUsage",
+        "host": "server01",
+        "name": "HighCpuUsage",
+        "severity": "warning",
+        "environment": "Production"
+      },
+      "annotations": {
+        "summary": "CPU above 90%",
+        "description": "server01 CPU has been above 90% for 5m"
+      },
+      "startsAt": "2026-04-24T12:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://grafana.test/alerting/rule/abc"
+    }
+  ]
+}

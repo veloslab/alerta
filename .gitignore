@@ -1,0 +1,36 @@
+/.venv/
+
+# Python build / install artifacts from `pip install -e src/...`
+__pycache__/
+*.egg-info/
+*.pyc
+
+# pytest cache
+.pytest_cache/
+
+# docker-compose.yml mounts ./pg-data for the base postgres service
+/pg-data/
+
+# Local env / secrets
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Coverage & linter caches (ready for pytest-cov / mypy / ruff)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
