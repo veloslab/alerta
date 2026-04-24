@@ -11,6 +11,7 @@
         "name": "DiskFull",
         "severity": "critical",
         "environment": "Production",
+        "service": "database",
         "resource": "db-primary-disk",
         "event": "disk_exhaustion",
         "slack_channel": "#db-alerts",

@@ -10,7 +10,8 @@
         "host": "web-01",
         "name": "GenericRule",
         "severity": "minor",
-        "environment": "Production"
+        "environment": "Production",
+        "service": "checkout"
       },
       "annotations": {
         "alertname": "P95LatencyDegraded",

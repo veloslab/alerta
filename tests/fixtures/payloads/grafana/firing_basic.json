@@ -10,7 +10,8 @@
         "host": "server01",
         "name": "HighCpuUsage",
         "severity": "warning",
-        "environment": "Production"
+        "environment": "Production",
+        "service": "telegraf"
       },
       "annotations": {
         "summary": "CPU above 90%",
