@@ -102,7 +102,11 @@ def compose_stack():
         pytest.fail(f'compose up failed:\n{up.stderr[-4000:]}')
 
     try:
-        _wait_for(f'{ALERTA_URL}/api/health', timeout=90)
+        # Alerta 9.x exposes its health endpoint as /management/healthcheck
+        # on the mgmt blueprint; nginx in the alerta-web image strips
+        # the /api/ prefix before proxying, so externally it lives at
+        # /api/management/healthcheck. /api/health returns 404.
+        _wait_for(f'{ALERTA_URL}/api/management/healthcheck', timeout=90)
         _wait_for(f'{SLACK_MOCK_URL}/_health', timeout=30)
     except TimeoutError as e:
         logs = _compose('logs', '--tail=200', check=False)
