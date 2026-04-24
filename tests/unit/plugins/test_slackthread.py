@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from slack_sdk.errors import SlackApiError
 
 from slackthread import (
     DEFAULT_COLOR_MAP,
@@ -163,18 +164,23 @@ class TestGetChannelId:
         assert plugin.get_channel_id(alert) == 'C_TEST_DEFAULT'
 
     def test_named_channel_looked_up_via_api(self, plugin):
+        # The real Slack API returns channel names WITHOUT a leading '#'.
+        # The plugin strips '#' from both the lookup key and the API names
+        # so the cache is keyed by the bare name (e.g. 'alerts-db').
         plugin.client.conversations_list.return_value = {
             'ok': True,
-            'channels': [{'name': '#alerts-db', 'id': 'C_DB'},
-                         {'name': '#alerts-infra', 'id': 'C_INFRA'}],
+            'channels': [{'name': 'alerts-db', 'id': 'C_DB'},
+                         {'name': 'alerts-infra', 'id': 'C_INFRA'}],
         }
+        # Users naturally write '#alerts-db'; the plugin strips the '#' before lookup.
         alert = _fake_alert(attributes={'slack_channel': '#alerts-db'})
         assert plugin.get_channel_id(alert) == 'C_DB'
-        # Cache populated.
-        assert plugin.channels['#alerts-db'] == 'C_DB'
+        # Cache is keyed by the stripped name, not the raw '#' form.
+        assert plugin.channels['alerts-db'] == 'C_DB'
 
     def test_named_channel_cache_prevents_second_call(self, plugin):
-        plugin.channels['#alerts-db'] = 'C_DB'  # pre-seeded cache
+        # Cache is keyed without '#'; pre-seed with the stripped name.
+        plugin.channels['alerts-db'] = 'C_DB'
         alert = _fake_alert(attributes={'slack_channel': '#alerts-db'})
         assert plugin.get_channel_id(alert) == 'C_DB'
         plugin.client.conversations_list.assert_not_called()
@@ -183,10 +189,10 @@ class TestGetChannelId:
         plugin.client.conversations_list.return_value = {
             'ok': True, 'channels': [],
         }
-        # Pre-seed cache with the lookup result ``None`` so the second
-        # ``channels.get`` branch fires (the "not found after lookup"
-        # path, matching the logger.warning call).
-        plugin.channels['#nonexistent'] = None
+        # Pre-seed cache with the lookup result ``None`` (stripped key) so the
+        # second ``channels.get`` branch fires — the "not found after lookup"
+        # path that triggers logger.warning and returns the default.
+        plugin.channels['nonexistent'] = None
         alert = _fake_alert(attributes={'slack_channel': '#nonexistent'})
         assert plugin.get_channel_id(alert) == 'C_TEST_DEFAULT'
 
@@ -271,10 +277,15 @@ class TestPostReceiveHappyPath:
         assert reply_call.kwargs['attachments'] == parent_call.kwargs['attachments']
 
     def test_history_reply_failure_does_not_abort(self, plugin):
-        """Failed history reply is logged but state is still recorded."""
+        """Failed history reply is logged but state is still recorded.
+
+        ``slack_sdk.WebClient`` raises ``SlackApiError`` on any non-ok
+        response, so the second call must raise rather than return an
+        error dict. The plugin catches it and continues.
+        """
         plugin.client.chat_postMessage.side_effect = [
             {'ok': True, 'ts': '1700000000.000100', 'channel': 'C_TEST_DEFAULT'},
-            {'ok': False, 'error': 'rate_limited'},
+            SlackApiError('rate_limited', {'ok': False, 'error': 'rate_limited'}),
         ]
         alert = _fake_alert()
         plugin.post_receive(alert)  # must not raise
@@ -316,7 +327,14 @@ class TestPostReceiveHappyPath:
         assert attachments[0]['color'] == DEFAULT_COLOR_MAP['critical']
 
     def test_failed_initial_post_short_circuits(self, plugin):
-        plugin.client.chat_postMessage.return_value = {'ok': False, 'error': 'nope'}
+        """A ``SlackApiError`` on the parent post causes an early return.
+
+        ``slack_sdk.WebClient`` raises on non-ok responses, so the mock
+        must raise rather than return an error dict.
+        """
+        plugin.client.chat_postMessage.side_effect = SlackApiError(
+            'channel_not_found', {'ok': False, 'error': 'channel_not_found'}
+        )
         alert = _fake_alert()
 
         result = plugin.post_receive(alert)
