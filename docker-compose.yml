@@ -1,5 +1,3 @@
-version: '3.1'
-
 services:
   web:
     build: .
@@ -18,7 +16,12 @@ services:
     restart: always
 
   db:
-    image: postgres
+    # Pinned: postgres:latest now tracks 18, which changed its data
+    # directory layout and refuses to reuse volumes from older majors.
+    # Alerta 9.x is tested against 13-16; pin to the latest of that
+    # range. If your production pg-data was initialized by a newer
+    # major, bump this tag to match that version instead.
+    image: postgres:16
     volumes:
       - ./pg-data:/var/lib/postgresql/data
     environment:
