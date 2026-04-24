@@ -8,7 +8,8 @@
       "labels": {
         "alertname": "SyntheticCheckFailed",
         "severity": "major",
-        "environment": "Production"
+        "environment": "Production",
+        "service": "synthetic-monitor"
       },
       "annotations": {
         "summary": "Synthetic probe failed"
