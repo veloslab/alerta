@@ -77,7 +77,11 @@ jobs:
       - name: Run smoke tests
         # tests/smoke/conftest.py runs `docker build` itself; ubuntu-latest
         # ships docker, so no setup-buildx or similar action is needed.
-        run: pytest -m smoke --tb=short
+        # Scope to tests/smoke/ explicitly — pytest imports every conftest
+        # and test module under the collected path at startup, and the
+        # unit test files `from slackthread import ...` at module level,
+        # which would fail here since this job doesn't install them.
+        run: pytest tests/smoke -m smoke --tb=short
 
   integration:
     name: Integration tests
@@ -105,8 +109,10 @@ jobs:
       - name: Run integration tests
         # Compose stack comes up from within the test fixtures
         # (tests/integration/conftest.py). Teardown is automatic
-        # unless ALERTA_TESTS_KEEP_STACK=1 is set.
-        run: pytest -m integration --tb=short
+        # unless ALERTA_TESTS_KEEP_STACK=1 is set. Scoped to
+        # tests/integration/ for the same reason as the smoke job —
+        # this runner doesn't install the editable src/ packages.
+        run: pytest tests/integration -m integration --tb=short
 
       - name: Dump compose logs on failure
         if: failure()
