@@ -97,6 +97,7 @@ def parse_grafana(alert: JSON, external_url: str) -> Alert:
         severity = labels.pop('severity', 'warning')
     elif status == 'resolved':
         severity = alarm_model.DEFAULT_NORMAL_SEVERITY
+        text = 'OK'
     else:
         severity = 'unknown'
 
@@ -136,6 +137,8 @@ def parse_grafana(alert: JSON, external_url: str) -> Alert:
     summary = annotations.pop('summary', None)
     description = annotations.pop('description', None)
     text = description or summary or f'{severity.upper()}: {resource} is {event}'
+    if status == 'resolved':
+        text = "OK"
 
     if external_url:
         annotations['externalUrl'] = external_url
