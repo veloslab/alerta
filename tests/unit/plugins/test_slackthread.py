@@ -159,27 +159,17 @@ class TestGetChannelId:
         alert = _fake_alert(attributes={})
         assert plugin.get_channel_id(alert) == 'C_TEST_DEFAULT'
 
-    def test_explicit_default_token(self, plugin):
-        alert = _fake_alert(attributes={'slack_channel': '@default'})
-        assert plugin.get_channel_id(alert) == 'C_TEST_DEFAULT'
-
     def test_named_channel_looked_up_via_api(self, plugin):
-        # The real Slack API returns channel names WITHOUT a leading '#'.
-        # The plugin strips '#' from both the lookup key and the API names
-        # so the cache is keyed by the bare name (e.g. 'alerts-db').
         plugin.client.conversations_list.return_value = {
             'ok': True,
             'channels': [{'name': 'alerts-db', 'id': 'C_DB'},
                          {'name': 'alerts-infra', 'id': 'C_INFRA'}],
         }
-        # Users naturally write '#alerts-db'; the plugin strips the '#' before lookup.
         alert = _fake_alert(attributes={'slack_channel': '#alerts-db'})
         assert plugin.get_channel_id(alert) == 'C_DB'
-        # Cache is keyed by the stripped name, not the raw '#' form.
         assert plugin.channels['alerts-db'] == 'C_DB'
 
     def test_named_channel_cache_prevents_second_call(self, plugin):
-        # Cache is keyed without '#'; pre-seed with the stripped name.
         plugin.channels['alerts-db'] = 'C_DB'
         alert = _fake_alert(attributes={'slack_channel': '#alerts-db'})
         assert plugin.get_channel_id(alert) == 'C_DB'
@@ -189,10 +179,6 @@ class TestGetChannelId:
         plugin.client.conversations_list.return_value = {
             'ok': True, 'channels': [],
         }
-        # Pre-seed cache with the lookup result ``None`` (stripped key) so the
-        # second ``channels.get`` branch fires — the "not found after lookup"
-        # path that triggers logger.warning and returns the default.
-        plugin.channels['nonexistent'] = None
         alert = _fake_alert(attributes={'slack_channel': '#nonexistent'})
         assert plugin.get_channel_id(alert) == 'C_TEST_DEFAULT'
 

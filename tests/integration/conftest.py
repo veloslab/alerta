@@ -153,33 +153,21 @@ def slack_mock(compose_stack):
     return _Handle()
 
 
-def _purge_all_alerts(session):
-    """Delete every alert in the test stack so each test starts clean.
-
-    Alerta has no bulk-delete on ``/api/alerts`` (returns 405 Method
-    Not Allowed), so we list and DELETE per-id. The single-resource
-    route is ``/api/alert/<id>`` (singular) — ``/api/alerts/<id>`` does
-    NOT exist and silently 404s. Without this, alert state — including
-    ``slack_ts`` in attributes — leaks between tests and the slackthread
-    plugin's ``generate_new_thread`` flips to False, sending a threaded
-    reply instead of a fresh parent + history reply.
-
-    Args:
-        session: An authenticated ``requests.Session`` against alerta.
-    """
-    r = session.get(f'{ALERTA_URL}/api/alerts', timeout=10)
-    r.raise_for_status()
-    for alert in r.json().get('alerts', []):
-        session.delete(f'{ALERTA_URL}/api/alert/{alert["id"]}', timeout=10)
-
-
 @pytest.fixture
 def alerta_client(compose_stack):
-    """``requests.Session`` pre-auth'd with the admin API key."""
+    """``requests.Session`` pre-auth'd with the admin API key.
+
+    Purges existing alerts on entry so each test starts with a clean
+    slate. Without this, ``slack_ts`` and friends leak across tests and
+    slackthread's ``generate_new_thread`` flips to False mid-suite.
+
+    Returns:
+        Authenticated ``requests.Session`` against the alerta API.
+    """
     s = requests.Session()
     s.headers.update({'Authorization': f'Key {ADMIN_API_KEY}'})
-    # Purge any alerts left by earlier tests so counts are deterministic.
-    _purge_all_alerts(s)
+    # /api/alerts has no DELETE; the bulk-delete route is /api/_bulk/alerts.
+    s.delete(f'{ALERTA_URL}/api/_bulk/alerts', timeout=10)
     return s
 
 
