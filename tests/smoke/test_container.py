@@ -54,13 +54,13 @@ def test_plugin_entry_points_registered(alerta_image):
     result = run_in_image(
         alerta_image,
         '/venv/bin/python', '-c',
-        'import json, pkg_resources; '
-        'print(json.dumps([ep.name for ep in pkg_resources.iter_entry_points("alerta.plugins")]))',
+        'import json; from importlib.metadata import entry_points; '
+        'print(json.dumps([ep.name for ep in entry_points(group="alerta.plugins")]))',
     )
     assert result.returncode == 0, result.stderr
 
-    # The last line of stdout is the JSON we printed. Earlier lines may
-    # be deprecation warnings from pkg_resources itself — grab the tail.
+    # Take the last stdout line defensively in case the interpreter
+    # emits warnings before our print().
     registered = json.loads(result.stdout.strip().splitlines()[-1])
     for name in EXPECTED_PLUGINS:
         assert name in registered, f'plugin {name!r} not registered, saw {registered}'
@@ -71,8 +71,8 @@ def test_webhook_entry_points_registered(alerta_image):
     result = run_in_image(
         alerta_image,
         '/venv/bin/python', '-c',
-        'import json, pkg_resources; '
-        'print(json.dumps([ep.name for ep in pkg_resources.iter_entry_points("alerta.webhooks")]))',
+        'import json; from importlib.metadata import entry_points; '
+        'print(json.dumps([ep.name for ep in entry_points(group="alerta.webhooks")]))',
     )
     assert result.returncode == 0, result.stderr
 
