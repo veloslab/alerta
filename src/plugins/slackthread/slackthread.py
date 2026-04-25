@@ -86,17 +86,13 @@ class SlackThreadPlugin(PluginBase, ABC):
         if dashboard_url and not dashboard_url.startswith(('http://', 'https://')):
             dashboard_url = 'https://' + dashboard_url
         self.dashboard_url = dashboard_url
-        # Two-step read so _select_template can tell whether an
-        # operator actually configured SLACK_DEFAULT_TEMPLATE. When
-        # set, it wins over the OK fallback (operator knows what they
-        # want). When unset, DEFAULT_SLACK_TEMPLATE_OK can swap in
-        # for resolved alerts. .env files can't carry a literal
-        # newline, so operators write the template on one line and
-        # use `\n` where they want breaks (Slack renders real
-        # newlines). Unescape those here.
-        configured_default = self.get_config('SLACK_DEFAULT_TEMPLATE', type=str, default=None)
-        self._default_template_configured = configured_default is not None
-        self.default_template = (configured_default or DEFAULT_SLACK_TEMPLATE).replace('\\n', '\n')
+        # When unset, _select_template can fall through to the
+        # OK-on-resolve template for resolved alerts. .env files can't
+        # carry a literal newline, so operators write the template on
+        # one line and use `\n` where they want breaks (Slack renders
+        # real newlines). Unescape those here.
+        configured = self.get_config('SLACK_DEFAULT_TEMPLATE', type=str, default=None)
+        self.default_template = configured.replace('\\n', '\n') if configured else None
         self.channels = {}
 
     def _select_template(self, alert: Alert) -> str:
@@ -120,7 +116,7 @@ class SlackThreadPlugin(PluginBase, ABC):
         per_alert = alert.attributes.get('slack_template')
         if per_alert is not None:
             return per_alert
-        if self._default_template_configured:
+        if self.default_template is not None:
             return self.default_template
         if alert.text and alert.text.lower() == 'ok':
             return DEFAULT_SLACK_TEMPLATE_OK
@@ -150,34 +146,28 @@ class SlackThreadPlugin(PluginBase, ABC):
 
         Slack's ``conversations.list`` API returns channel names WITHOUT a
         leading ``#``, but users naturally write ``slack_channel: '#alerts-db'``
-        in Grafana labels (matching how they'd mention a channel in Slack).
-        Strip ``#`` on both sides — the user-supplied key and the names
-        returned by the API — so the cache and lookup keys always agree
-        regardless of which convention the source uses.
+        in Grafana labels. Strip ``#`` on both sides so the cache key
+        agrees with the API result regardless of which form is used.
 
         Args:
             alert: The Alerta alert being processed. The ``slack_channel``
-                attribute is read; ``@default`` (or absent) returns the
-                plugin's configured default channel ID.
+                attribute is read; absent or empty returns the plugin's
+                configured default channel ID.
 
         Returns:
             The Slack channel ID string (e.g. ``'C012AB3CD'``). Falls back
             to ``self.default_channel_id`` when the name cannot be resolved.
         """
-        raw = alert.attributes.get('slack_channel', '@default')
-        if raw == '@default':
+        raw = alert.attributes.get('slack_channel')
+        if not raw:
             return self.default_channel_id
 
-        # Strip '#' so '#alerts-db' and 'alerts-db' both resolve the same
-        # cache entry. The API always returns names without '#', so we also
-        # strip when populating the cache below.
         channel = raw.lstrip('#')
-
-        if self.channels.get(channel) is None:
+        if channel not in self.channels:
             data = self.client.conversations_list(types='public_channel,private_channel')
             self.channels.update({i['name'].lstrip('#'): i['id'] for i in data['channels']})
 
-        if self.channels.get(channel) is None:
+        if channel not in self.channels:
             logger.warning(f"Unable to find channel id for '{raw}', using default channel id")
             return self.default_channel_id
 
@@ -218,8 +208,6 @@ class SlackThreadPlugin(PluginBase, ABC):
             }
         ]
 
-        # Determine if thread needs to be created
-        initial_thread_message = False
         if self.generate_new_thread(alert, slack_channel_id):
             try:
                 response = self.client.chat_postMessage(
@@ -233,18 +221,12 @@ class SlackThreadPlugin(PluginBase, ABC):
                 )
                 return
 
-            # Record the parent thread's ts and channel before the history
-            # reply so the alert state is preserved even if the reply fails.
             alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
-            initial_thread_message = True
 
-            # Repost the same payload as the first thread reply so the
-            # thread retains an immutable snapshot of the original state
-            # even after chat_update later mutates the parent message.
-            # A failure here logs but does not abort — the parent post
-            # already succeeded and the alert state is recorded; losing
-            # the history reply is strictly less bad than losing the
-            # whole notification.
+            # Repost as the first thread reply so the thread retains an
+            # immutable snapshot of the original state even after
+            # chat_update later mutates the parent. A failure here is
+            # non-fatal: parent and state are already recorded.
             try:
                 self.client.chat_postMessage(
                     channel=slack_channel_id,
@@ -256,10 +238,7 @@ class SlackThreadPlugin(PluginBase, ABC):
                     f"History reply to new thread failed for {alert}: "
                     f"{e.response.get('error', e)}"
                 )
-
-        # If not initial message for thread, send reply to thread and/or update parent message
-        if initial_thread_message is False:
-            # Send reply to thread
+        else:
             try:
                 self.client.chat_postMessage(
                     channel=slack_channel_id,

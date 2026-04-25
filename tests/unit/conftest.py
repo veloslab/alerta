@@ -11,41 +11,29 @@ Mark every test in this tree with ``@pytest.mark.unit`` (or configure
 auto-marking in the module) so ``pytest -m unit`` skips docker tiers.
 """
 import pytest
+from flask import Flask
 
 
-# Heavy imports (flask, alerta.*) are deferred into fixture bodies so
-# pytest can collect this conftest even when those packages aren't
-# installed — the smoke CI job runs `pytest -m smoke` with only the
-# test-runner deps, and pytest imports every conftest under
-# `testpaths` at collection time regardless of the marker filter.
+# Alerta's ``Alert`` constructor and ``alarm_model`` read ~100 config
+# keys (ALERT_TIMEOUT, COLOR_MAP, etc.) directly off ``current_app.config``.
+# Rather than reimplement those, load alerta's own default settings
+# module verbatim, then layer test-specific overrides on top.
+from alerta import settings as alerta_settings
 
+_ALERTA_DEFAULTS = {
+    k: getattr(alerta_settings, k) for k in dir(alerta_settings) if k.isupper()
+}
 
-def _build_default_config():
-    """Assemble the default test config, pulling alerta defaults lazily.
-
-    Alerta's ``Alert`` constructor and ``alarm_model`` read ~100 config
-    keys directly off ``current_app.config``; rather than reimplement
-    them, load alerta's own settings module and layer test-specific
-    overrides on top.
-
-    Returns:
-        Dict of config keys ready to push onto a Flask app.
-    """
-    from alerta import settings as alerta_settings
-
-    alerta_defaults = {
-        k: getattr(alerta_settings, k) for k in dir(alerta_settings) if k.isupper()
-    }
-    return {
-        **alerta_defaults,
-        'TESTING': True,
-        'DEFAULT_ENVIRONMENT': 'Production',
-        'SLACK_TOKEN': 'xoxb-test-token',
-        'SLACK_DEFAULT_CHANNEL_ID': 'C_TEST_DEFAULT',
-        'SLACK_DEFAULT_THREAD_TIMEOUT': 24,
-        'SLACK_BASE_URL': 'http://mock-slack.test/api/',
-        'DASHBOARD_URL': 'https://alerta.test',
-    }
+DEFAULT_CONFIG = {
+    **_ALERTA_DEFAULTS,
+    'TESTING': True,
+    'DEFAULT_ENVIRONMENT': 'Production',
+    'SLACK_TOKEN': 'xoxb-test-token',
+    'SLACK_DEFAULT_CHANNEL_ID': 'C_TEST_DEFAULT',
+    'SLACK_DEFAULT_THREAD_TIMEOUT': 24,
+    'SLACK_BASE_URL': 'http://mock-slack.test/api/',
+    'DASHBOARD_URL': 'https://alerta.test',
+}
 
 
 @pytest.fixture
@@ -70,10 +58,8 @@ def alerta_app():
         ``_sync_plugins_app_config`` fixture mirrors the keys into
         the FakeApp automatically when ``app_context`` is used.
     """
-    from flask import Flask
-
     app = Flask('alerta-test')
-    app.config.update(_build_default_config())
+    app.config.update(DEFAULT_CONFIG)
     return app
 
 

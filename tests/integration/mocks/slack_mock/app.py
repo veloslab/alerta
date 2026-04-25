@@ -131,9 +131,6 @@ def conversations_list():
     # Default seed matches integration test fixtures. Extend via
     # SLACK_MOCK_CHANNELS env var (comma-separated "name:id" pairs)
     # if a specific test needs a custom roster.
-    # Names match the test fixtures' slack_channel labels with the
-    # leading '#' stripped (Slack's real API returns names without '#';
-    # the plugin normalizes both sides).
     default_channels = [
         {'id': 'C_ALERTS_DEFAULT', 'name': 'alerts'},
         {'id': 'C_ALERTS_DB',      'name': 'db-alerts'},
