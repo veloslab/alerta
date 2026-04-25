@@ -7,7 +7,7 @@ design; extend in place as the code grows.
 
 A custom Alerta build for the veloslab stack. The `src/` tree holds
 pip-installable plugin and webhook packages that extend `alerta-server`;
-the `Dockerfile` layers them onto `alerta/alerta-web:9.0.4`.
+the `Dockerfile` layers them onto `alerta/alerta-web:9.1.0`.
 
 ## Layout
 
@@ -35,17 +35,15 @@ Every package under `src/` has its own `setup.py` with an
 ## Dev environment — always use the repo-local venv
 
 All Python commands in this repo run through `.venv/bin/python`. Do
-not use system Python or `pyenv` — the venv pins `setuptools<81` and
-carries editable installs of every `src/` package, and tests depend on
-both.
+not use system Python or `pyenv` — the venv carries editable installs
+of every `src/` package, and tests depend on them.
 
 First-time setup:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install --upgrade pip 'setuptools<81'
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/pip install alerta-server==9.0.3 strenum
 .venv/bin/pip install -e src/plugins/slackthread \
                       -e src/plugins/override \
                       -e src/webhooks/vls_grafana \

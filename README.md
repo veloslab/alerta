@@ -2,7 +2,7 @@
 
 Custom Alerta build for the veloslab stack. Layers four pip-installed
 packages (two plugins, two webhooks) onto the upstream
-`alerta/alerta-web:9.0.4` image.
+`alerta/alerta-web:9.1.0` image.
 
 For Claude Code guidelines and repo conventions see `CLAUDE.md`.
 For the test framework see `tests/README.md`.
@@ -163,9 +163,8 @@ See `CLAUDE.md` for the full workflow. The short version:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install --upgrade pip 'setuptools<81'
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/pip install alerta-server==9.0.3 strenum
 .venv/bin/pip install -e src/plugins/slackthread \
                       -e src/plugins/override \
                       -e src/webhooks/vls_grafana \

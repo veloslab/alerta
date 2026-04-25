@@ -41,9 +41,8 @@ entry-point name.
 ```bash
 # one-time setup (from the alerta/ repo root)
 python3 -m venv .venv
-.venv/bin/pip install --upgrade pip 'setuptools<81'
+.venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/pip install alerta-server==9.0.3 strenum
 .venv/bin/pip install -e src/plugins/slackthread \
                       -e src/plugins/override \
                       -e src/webhooks/vls_grafana \
@@ -57,13 +56,6 @@ python3 -m venv .venv
 # everything
 .venv/bin/python -m pytest
 ```
-
-Notes on pinning:
-* `setuptools<81` — alerta-server 9.0.3 uses `pkg_resources`, which
-  setuptools 81 finally dropped. Pin until alerta moves to
-  `importlib.metadata`.
-* `strenum` — alerta-server 9.0.3 requires it but doesn't list it in
-  install_requires on Python 3.12+.
 
 ### Debugging a failing integration test
 

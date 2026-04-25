@@ -38,13 +38,14 @@ jobs:
 
       - name: Install dev deps + editable src/ packages
         # Mirrors the venv bootstrap in CLAUDE.md — keep in sync.
-        # psycopg2 from requirements.txt is skipped here: unit tests
-        # never touch the DB, and compiling it needs libpq-dev which
-        # isn't worth the runner time.
+        # We install requirements.txt minus psycopg2: unit tests
+        # never touch the DB, and compiling psycopg2 needs libpq-dev
+        # which isn't worth the runner time. alerta-server pulls
+        # StrEnum in transitively, so no extra pin is needed here.
         run: |
-          python -m pip install --upgrade pip 'setuptools<81'
+          python -m pip install --upgrade pip
+          grep -v '^psycopg2' requirements.txt | pip install -r /dev/stdin
           pip install -r requirements-dev.txt
-          pip install alerta-server==9.0.3 strenum
           pip install -e src/plugins/slackthread \
                       -e src/plugins/override \
                       -e src/webhooks/vls_grafana \
