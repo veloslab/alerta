@@ -112,6 +112,17 @@ Two workflows live in `.github/workflows/`:
   on version tags (`v*`). Keep it release-only; don't retrigger it
   from CI.
 
+Each tier job invokes pytest with both an explicit path AND its
+marker — `pytest tests/<tier> -m <tier>`. The path scoping is
+load-bearing: smoke and integration jobs don't install the editable
+`src/` packages, and pytest collects every conftest under the path it
+walks. If a job runs `pytest -m smoke` from the repo root, pytest
+also collects `tests/unit/conftest.py` (which imports `flask` and
+`alerta.*`), which fails with ImportError. Keep the path scope; don't
+trust marker filtering alone. The integration job also sets
+`ALERTA_TESTS_KEEP_STACK=1` so the failure-log-dump step has a stack
+to read from.
+
 When you add a new test tier, fixture pattern, or runtime dependency
 that CI needs, update `ci.yml` in the same change. The tier markers
 (`-m unit`, `-m smoke`, `-m integration`) mean *test additions* don't

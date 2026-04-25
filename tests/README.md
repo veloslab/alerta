@@ -130,6 +130,16 @@ Pattern lives in `tests/integration/mocks/slack_mock/`. Copy it and:
 5. Add a fixture in `tests/integration/conftest.py` that returns a
    handle with `captured()` and `queue()` methods.
 
+## Per-test reset
+
+Integration tests purge the alerts table between tests via
+`DELETE /api/_bulk/alerts` (in `tests/integration/conftest.py` →
+`alerta_client` fixture). `DELETE /api/alerts` returns 405 Method Not
+Allowed on alerta 9.x — the bulk route is the only supported
+match-everything delete. Without the purge, `slack_ts` and friends
+leak across tests and slackthread's `generate_new_thread` flips to
+False mid-suite.
+
 ## Why the plugin needed `SLACK_BASE_URL`
 
 `slack_sdk.WebClient` defaults to `https://www.slack.com/api/`. To hit
