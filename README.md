@@ -35,8 +35,9 @@ gets its own thread, routed to a configurable channel.
 - **Hooks**: `post_receive` (after-ingest side effect only)
 - **Channel routing**: `slack_channel` attribute on the alert
   overrides the default; `#channel-name` is resolved via
-  `conversations.list` and cached in-process. `@default` or absent →
-  `SLACK_DEFAULT_CHANNEL_ID`.
+  `conversations.list` and cached in-process. Absent or empty →
+  `SLACK_DEFAULT_CHANNEL_ID`. The leading `#` is optional —
+  `#alerts-db` and `alerts-db` resolve identically.
 - **Thread rotation**: a new thread is started when the existing
   `slack_ts` is older than `SLACK_DEFAULT_THREAD_TIMEOUT` hours (or
   the per-alert `slack_thread_timeout` attribute), or when the
