@@ -37,6 +37,9 @@ class OverridePlugin(PluginBase, ABC):
 
     def pre_receive(self, alert: Alert, **kwargs) -> Alert:
         services = [i.lower() for i in alert.service]
+        # vls_grafana sends service=[] when a rule has no service label.
+        if not services:
+            return alert
         if len(services) > 1:
             logger.warning("More than one service listed...override plugin will use first one")
         service = services[0]
