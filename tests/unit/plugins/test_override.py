@@ -125,6 +125,21 @@ class TestPreReceive:
 
         assert out.severity == 'critical'
 
+    def test_empty_service_passes_through(self, alerta_app, load_plugin):
+        """An alert with no service must pass unchanged.
+
+        vls_grafana sends service=[] for rules without a service label. A
+        failure here makes Alerta return 500 and drops every Grafana alert.
+        """
+        alerta_app.config['OVERRIDE_infra_severity'] = 'critical'
+        plugin = load_plugin()
+
+        alert = _fake_alert(service=[], severity='warning')
+        out = plugin.pre_receive(alert)
+
+        assert out is alert
+        assert out.severity == 'warning'
+
     def test_multi_service_uses_first_and_warns(self, alerta_app, load_plugin, caplog):
         alerta_app.config['OVERRIDE_infra_severity'] = 'critical'
         plugin = load_plugin()
