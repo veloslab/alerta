@@ -208,6 +208,12 @@ class SlackThreadPlugin(PluginBase, ABC):
             }
         ]
 
+        # Senders can set the value as a JSON boolean or as a string.
+        raw_replies = alert.attributes.get('slack_thread_replies', True)
+        replies_off = raw_replies is False or (
+            isinstance(raw_replies, str) and raw_replies.strip().lower() in ('false', '0', 'no')
+        )
+
         if self.generate_new_thread(alert, slack_channel_id):
             try:
                 response = self.client.chat_postMessage(
@@ -222,6 +228,10 @@ class SlackThreadPlugin(PluginBase, ABC):
                 return
 
             alert.update_attributes({'slack_ts': response['ts'], 'slack_channel_id': response['channel']})
+
+            # With replies off, the plugin never calls chat_update, so it skips the history reply.
+            if replies_off:
+                return
 
             # Repost as the first thread reply so the thread retains an
             # immutable snapshot of the original state even after
@@ -238,6 +248,8 @@ class SlackThreadPlugin(PluginBase, ABC):
                     f"History reply to new thread failed for {alert}: "
                     f"{e.response.get('error', e)}"
                 )
+        elif replies_off:
+            logger.info(f"Thread replies are off, skipping Slack post for {alert}")
         else:
             try:
                 self.client.chat_postMessage(

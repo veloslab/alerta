@@ -42,6 +42,15 @@ gets its own thread, routed to a configurable channel.
   `slack_ts` is older than `SLACK_DEFAULT_THREAD_TIMEOUT` hours (or
   the per-alert `slack_thread_timeout` attribute), or when the
   resolved channel doesn't match the attached `slack_channel_id`.
+- **Thread replies**: the per-alert `slack_thread_replies` attribute
+  turns replies off. The accepted false values are the JSON boolean
+  `false`, and the strings `false`, `0` and `no`. The plugin ignores
+  case and surrounding spaces in string values. Any other value, or no
+  attribute, keeps replies on. With replies off, a new thread posts
+  only its parent message. A duplicate inside the thread timeout, on
+  the same channel, posts nothing. With replies off, the plugin never
+  updates the parent message. Pair it with `slack_thread_timeout` to get
+  one Slack post per timeout window.
 - **Notification gating**: `slack_notification_modulus` on the alert
   suppresses traffic — only every Nth duplicate posts. OK/normal
   duplicates are suppressed unconditionally.
@@ -62,6 +71,7 @@ gets its own thread, routed to a configurable channel.
   gives the thread an immutable snapshot of the original firing
   state, so later `chat_update` calls that mutate the parent message
   don't erase the original content from the channel's scrollback.
+  With `slack_thread_replies` off, the plugin skips this reply.
 - **Config** (all env vars — `PluginBase.get_config` is env-only):
   - `SLACK_TOKEN` — bot token (`xoxb-…`)
   - `SLACK_DEFAULT_CHANNEL_ID` — channel ID for unspecified routes
