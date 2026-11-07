@@ -11,6 +11,7 @@ Tests cover:
 * ``get_channel_id`` with cache hits, cache misses, and unknown channels.
 * ``post_receive`` gating logic: ok/normal dedup, notification modulus.
 * ``post_receive`` happy path: initial post vs. thread reply + parent update.
+* ``slack_thread_replies`` switch: parent-only posts and silent duplicates.
 """
 import time
 from types import SimpleNamespace
@@ -331,6 +332,124 @@ class TestPostReceiveHappyPath:
         # Exactly one attempt (the failing parent post) — no reply, no update.
         assert plugin.client.chat_postMessage.call_count == 1
         plugin.client.chat_update.assert_not_called()
+
+
+class TestThreadRepliesAttribute:
+    """Per-alert ``slack_thread_replies`` switch: off stops thread traffic, on keeps it."""
+
+    def test_replies_off_new_thread_posts_parent_only(self, plugin):
+        """A new thread with replies off posts one parent and records it.
+
+        The history reply would add a second Slack message for the window,
+        which is the traffic the switch removes. If the plugin does not
+        record ``slack_ts``, the next duplicate starts another thread and
+        posts again.
+        """
+        plugin.client.chat_postMessage.return_value = {
+            'ok': True, 'ts': '1700000000.000100', 'channel': 'C_TEST_DEFAULT',
+        }
+        alert = _fake_alert(attributes={'slack_thread_replies': 'false'})
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_called_once()
+        assert 'thread_ts' not in plugin.client.chat_postMessage.call_args.kwargs
+        assert alert.attributes['slack_ts'] == '1700000000.000100'
+        assert alert.attributes['slack_channel_id'] == 'C_TEST_DEFAULT'
+
+    def test_replies_off_fresh_thread_posts_nothing(self, plugin):
+        """A duplicate inside the thread timeout sends nothing to Slack.
+
+        A reply or a parent update here adds one Slack message for each
+        duplicate. That traffic is what the switch exists to remove.
+        """
+        alert = _fake_alert(attributes={
+            'slack_ts': str(time.time() - 60),  # 1 minute old
+            'slack_channel_id': 'C_TEST_DEFAULT',
+            'slack_thread_replies': 'false',
+        })
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_not_called()
+        plugin.client.chat_update.assert_not_called()
+
+    def test_replies_off_expired_thread_starts_new_parent_only(self, plugin):
+        """An expired thread with replies off starts one new top-level post.
+
+        Rotation starts the next timeout window. Without it, the expired
+        ``slack_ts`` stays in place, and with replies off the alert never
+        posts to Slack again.
+        """
+        plugin.client.chat_postMessage.return_value = {
+            'ok': True, 'ts': '1700000000.000100', 'channel': 'C_TEST_DEFAULT',
+        }
+        alert = _fake_alert(attributes={
+            'slack_ts': str(time.time() - 2 * 3600),  # 2 hours old
+            'slack_channel_id': 'C_TEST_DEFAULT',
+            'slack_thread_timeout': '1',
+            'slack_thread_replies': 'false',
+        })
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_called_once()
+        assert 'thread_ts' not in plugin.client.chat_postMessage.call_args.kwargs
+        plugin.client.chat_update.assert_not_called()
+        assert alert.attributes['slack_ts'] == '1700000000.000100'
+
+    @pytest.mark.parametrize('value', [
+        pytest.param(False, id='bool-false'),
+        pytest.param('false', id='str-false'),
+        pytest.param('False', id='str-capitalized'),
+        pytest.param(' FALSE ', id='str-padded-upper'),
+        pytest.param('0', id='str-zero'),
+        pytest.param('no', id='str-no'),
+    ])
+    def test_off_values_silence_duplicates(self, plugin, value):
+        """Every accepted false value keeps a duplicate in the window silent.
+
+        Grafana labels send strings and API clients send JSON booleans, so
+        each form and its case or space variants must turn replies off. A
+        value the plugin does not recognize keeps replies on, and every
+        duplicate then reposts into the thread.
+        """
+        alert = _fake_alert(attributes={
+            'slack_ts': str(time.time() - 60),  # 1 minute old
+            'slack_channel_id': 'C_TEST_DEFAULT',
+            'slack_thread_replies': value,
+        })
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_not_called()
+        plugin.client.chat_update.assert_not_called()
+
+    @pytest.mark.parametrize('extra', [
+        pytest.param({}, id='absent'),
+        pytest.param({'slack_thread_replies': True}, id='bool-true'),
+        pytest.param({'slack_thread_replies': 'true'}, id='str-true'),
+        pytest.param({'slack_thread_replies': '1'}, id='str-one'),
+    ])
+    def test_on_values_keep_threaded_reply_and_parent_update(self, plugin, extra):
+        """An absent or true value keeps the threaded reply and parent update.
+
+        Alerts that never set the attribute rely on the default. If the
+        default or a true value turned replies off, those alerts would stop
+        updating their Slack parent message.
+        """
+        slack_ts = str(time.time() - 60)  # 1 minute old
+        alert = _fake_alert(attributes={
+            'slack_ts': slack_ts,
+            'slack_channel_id': 'C_TEST_DEFAULT',
+            **extra,
+        })
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_called_once()
+        assert plugin.client.chat_postMessage.call_args.kwargs['thread_ts'] == slack_ts
+        plugin.client.chat_update.assert_called_once()
 
 
 class TestSelectTemplate:
