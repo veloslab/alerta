@@ -52,7 +52,12 @@ gets its own thread, routed to a configurable channel.
   updates the parent message. Pair it with `slack_thread_timeout` to get
   one Slack post per timeout window.
 - **Notification gating**: `slack_notification_modulus` on the alert
-  suppresses traffic — only every Nth duplicate posts. OK/normal
+  suppresses traffic — only every Nth duplicate posts. A value of `0`
+  suppresses every duplicate that has a thread. A duplicate with no
+  `slack_ts` still posts, so a failed first post is tried again. Alerta sets `duplicate_count` to 0 on a
+  new alert and on a severity change. Those alerts still post, except an
+  OK/normal alert with a value of `0` and no `slack_ts`: it posts
+  nothing, because no Slack thread exists to update. OK/normal
   duplicates are suppressed unconditionally.
 - **Templating**: Jinja2 over the alert. Defaults live in
   `DEFAULT_SLACK_TEMPLATE`; override per-alert with the

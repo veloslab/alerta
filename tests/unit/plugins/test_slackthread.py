@@ -208,6 +208,64 @@ class TestPostReceiveGating:
         # Parent + history reply = 2 calls (see TestPostReceiveHappyPath).
         assert plugin.client.chat_postMessage.call_count == 2
 
+    def test_modulus_zero_ok_without_thread_makes_no_call(self, plugin):
+        """A modulus-0 ok alert with no slack_ts posts nothing.
+
+        A sender that repeats its state sends ok before any failure. A new
+        thread would show a recovery with no failure above it.
+        """
+        alert = _fake_alert(
+            severity='ok', duplicate_count=0,
+            attributes={'slack_notification_modulus': 0},
+        )
+
+        assert plugin.post_receive(alert) is None
+        plugin.client.chat_postMessage.assert_not_called()
+        plugin.client.chat_update.assert_not_called()
+
+    def test_modulus_zero_normal_without_thread_makes_no_call(self, plugin):
+        """A modulus-0 normal alert with no slack_ts posts nothing.
+
+        A healthy state can arrive before any failure. Without this rule,
+        the first normal would open a Slack thread of two messages with no
+        failure above them.
+        """
+        alert = _fake_alert(
+            severity='normal', duplicate_count=0,
+            attributes={'slack_notification_modulus': 0},
+        )
+
+        assert plugin.post_receive(alert) is None
+        plugin.client.chat_postMessage.assert_not_called()
+        plugin.client.chat_update.assert_not_called()
+
+    def test_modulus_zero_normal_with_thread_posts_reply_and_update(self, plugin):
+        """A modulus-0 normal at duplicate_count 0 posts into the existing thread.
+
+        A recovery is a severity change, so Alerta sets duplicate_count to 0.
+        The recovery must reach the failure thread. A rule that blocked every
+        count-0 ok/normal would hide the recovery from the channel.
+        """
+        plugin.client.chat_postMessage.return_value = {
+            'ok': True, 'ts': '1.1', 'channel': 'C_TEST_DEFAULT',
+        }
+        slack_ts = str(time.time() - 60)  # fresh thread
+        alert = _fake_alert(
+            severity='normal',
+            duplicate_count=0,
+            attributes={
+                'slack_ts': slack_ts,
+                'slack_channel_id': 'C_TEST_DEFAULT',
+                'slack_notification_modulus': 0,
+            },
+        )
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_called_once()
+        assert plugin.client.chat_postMessage.call_args.kwargs['thread_ts'] == slack_ts
+        plugin.client.chat_update.assert_called_once()
+
     def test_notification_modulus_skips_non_matching(self, plugin):
         alert = _fake_alert(
             duplicate_count=1,
@@ -226,6 +284,87 @@ class TestPostReceiveGating:
         )
         plugin.post_receive(alert)
         plugin.client.chat_postMessage.assert_called()
+
+    @pytest.mark.parametrize('modulus', [
+        pytest.param(0, id='int-zero'),
+        pytest.param('0', id='str-zero'),
+    ])
+    def test_modulus_zero_skips_duplicate(self, plugin, modulus):
+        """A modulus of 0 posts no duplicate and raises nothing.
+
+        A sender that repeats its failure state sets modulus 0. A duplicate
+        that posted would add a reply and a parent update for each repeat.
+        The modulo check divides by the modulus, so 0 must skip that check.
+        """
+        alert = _fake_alert(
+            duplicate_count=1,
+            attributes={
+                'slack_ts': str(time.time() - 60),  # fresh thread
+                'slack_channel_id': 'C_TEST_DEFAULT',
+                'slack_notification_modulus': modulus,
+            },
+        )
+
+        assert plugin.post_receive(alert) is None
+        plugin.client.chat_postMessage.assert_not_called()
+        plugin.client.chat_update.assert_not_called()
+
+    def test_modulus_zero_duplicate_without_thread_posts(self, plugin):
+        """A modulus-0 duplicate with no thread must post.
+
+        When Slack rejects the first post, no slack_ts is stored. Without
+        this rule every repeat is skipped, and the failure never reaches
+        Slack.
+        """
+        alert = _fake_alert(
+            duplicate_count=1,
+            attributes={'slack_notification_modulus': 0},
+        )
+
+        plugin.post_receive(alert)
+        plugin.client.chat_postMessage.assert_called()
+
+    def test_modulus_zero_new_alert_posts(self, plugin):
+        """A modulus of 0 still posts an alert at duplicate_count 0.
+
+        A new alert has no earlier post. If modulus 0 skipped it, the
+        channel would never see the alert.
+        """
+        plugin.client.chat_postMessage.side_effect = [
+            {'ok': True, 'ts': '1700000000.000100', 'channel': 'C_TEST_DEFAULT'},
+            {'ok': True, 'ts': '1700000000.000200', 'channel': 'C_TEST_DEFAULT'},
+        ]
+        alert = _fake_alert(duplicate_count=0, attributes={'slack_notification_modulus': 0})
+
+        plugin.post_receive(alert)
+
+        assert alert.attributes['slack_ts'] == '1700000000.000100'
+
+    def test_modulus_zero_severity_change_posts_into_thread(self, plugin):
+        """A modulus of 0 posts a severity change into the thread it belongs to.
+
+        A severity change sets duplicate_count to 0. The change must reach
+        the thread that the earlier alert started, or the channel never sees it.
+        """
+        plugin.client.chat_postMessage.return_value = {
+            'ok': True, 'ts': '1.1', 'channel': 'C_TEST_DEFAULT',
+        }
+        slack_ts = str(time.time() - 60)  # fresh thread
+        alert = _fake_alert(
+            severity='critical',
+            duplicate_count=0,
+            attributes={
+                'slack_ts': slack_ts,
+                'slack_channel_id': 'C_TEST_DEFAULT',
+                'slack_notification_modulus': 0,
+            },
+        )
+
+        plugin.post_receive(alert)
+
+        plugin.client.chat_postMessage.assert_called_once()
+        assert plugin.client.chat_postMessage.call_args.kwargs['thread_ts'] == slack_ts
+        plugin.client.chat_update.assert_called_once()
 
 
 class TestPostReceiveHappyPath:
