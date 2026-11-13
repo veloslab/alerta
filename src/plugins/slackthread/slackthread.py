@@ -185,7 +185,20 @@ class SlackThreadPlugin(PluginBase, ABC):
         # Slack Notification Modulus
         slack_notification_modulus = int(alert.attributes.get('slack_notification_modulus', 1))
 
-        if alert.duplicate_count % slack_notification_modulus != 0:
+        # A modulus of 0 marks a sender that repeats its state, healthy or not.
+        # Alerta sets duplicate_count to 0 on a new alert and on a severity
+        # change, so those alerts still post.
+        if slack_notification_modulus == 0:
+            has_thread = alert.attributes.get('slack_ts') is not None
+            # A duplicate with no thread follows a failed first post, so it posts.
+            if alert.duplicate_count > 0 and has_thread:
+                logger.info("Slack message won't be sent, slack_notification_modulus is 0 for a duplicate")
+                return
+            # A new thread would post a healthy state with no failure before it.
+            if alert.severity.lower() in ['ok', 'normal'] and not has_thread:
+                logger.info(f"Slack message won't be sent, no slack thread exists for {alert}")
+                return
+        elif alert.duplicate_count % slack_notification_modulus != 0:
             logger.info(f"Slack message won't be send, slack_notification_modulus returned non-zero")
             return
 
